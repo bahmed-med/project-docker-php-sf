@@ -1,0 +1,111 @@
+version: '2.1'
+
+services:
+    db:
+        image: mariadb:10.1
+        command: ["--default-authentication-plugin=mysql_native_password"]
+        volumes:
+            - "./.data/db:/var/lib/mysql"
+        environment:
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+            MYSQL_DATABASE: ${MYSQL_DATABASE}
+            MYSQL_USER: ${MYSQL_USER}
+            MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+        ports:
+            - "3306:3306"
+        restart: always
+    php:
+        build:
+            context: php7-fpm
+            args:
+                TIMEZONE: ${TIMEZONE}
+        volumes:
+            - ${APP_PATH}:/var/www/docker
+            - ./php.ini:/usr/local/etc/php/conf.d/my-custom-php.ini
+           
+#            - ./logs/symfony:/var/www/docker/symfony/var/logs
+    web:
+        build: 
+            context: nginx
+
+        ports:
+            - 8000:80
+        volumes_from:
+            - php
+        volumes:
+            - ./logs/nginx/:/var/log/nginx
+
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin
+        links:
+            - db
+        environment:
+            PMA_HOST: db
+            PMA_PORT: 3306
+        ports:
+            - '8080:80'
+    elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:6.0.1
+        environment:
+           - cluster.name=demo
+           - bootstrap.memory_lock=true
+           - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+           - transport.host=127.0.0.1
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+        ports:
+            - 9200:9200
+    jenkins:
+        image: jenkinsci/blueocean
+        user: root
+        ports:
+           - "8085:8080"
+        volumes:
+           - ./jenkins_data:/var/jenkins_home
+           - /var/run/docker.sock:/var/run/docker.sock
+           - ./:/home
+
+    mongo:
+        image: mongo
+        restart: always
+        ports:
+           - "27017:27017"
+        environment:
+            - MONGO_INITDB_ROOT_USERNAME=root
+            - MONGO_INITDB_ROOT_PASSWORD=secret
+        volumes:
+            - mongo-data:/data/db
+ 
+    mongo-express:
+        image: mongo-express
+        restart: always
+        ports:
+           - "8081:8081"
+        links:
+           - mongo
+        environment:
+            - ME_CONFIG_MONGODB_ADMINUSERNAME=root
+            - ME_CONFIG_MONGODB_ADMINPASSWORD=secret
+            - ME_CONFIG_MONGODB_SERVER=mongo
+            - ME_CONFIG_MONGODB_PORT=27017
+            - ME_CONFIG_MONGODB_ENABLE_ADMIN=false
+            - ME_CONFIG_MONGODB_AUTH_DATABASE=admin
+            - ME_CONFIG_MONGODB_AUTH_USERNAME=${MONGO_ROOT_USER}
+            - ME_CONFIG_MONGODB_AUTH_PASSWORD=${MONGO_ROOT_PASSWORD}
+            - ME_CONFIG_BASICAUTH_USERNAME=${MONGOEXPRESS_LOGIN}
+            - ME_CONFIG_BASICAUTH_PASSWORD=${MONGOEXPRESS_PASSWORD}
+    maildev:
+        image: djfarrelly/maildev
+        ports:
+           - "1080:80"
+    rabbitmq:
+        image: "rabbitmq:management"
+        ports:
+           - "15672:15672"
+           - "5672:5672"
+ 
+volumes:
+    mongo-data:          
+        
